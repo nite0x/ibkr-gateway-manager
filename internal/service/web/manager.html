@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>IBKR Gateway Manager</title>
+  <link rel="stylesheet" href="/manager/manager.css">
+
+</head>
+<body>
+  <section id="loginScreen" class="login-shell">
+    <form id="loginForm" class="login-card">
+      <p class="eyebrow">IBKR Gateway Manager</p><h1>登录管理页面</h1>
+      <p class="subtitle">使用启动配置中的用户名和密码登录。</p>
+      <div class="field"><label for="username">用户名</label><input id="username" name="username" autocomplete="username" required autofocus></div>
+      <div class="field"><label for="password">密码</label><input id="password" name="password" type="password" autocomplete="current-password" required></div>
+      <p id="loginError" class="login-error" role="alert"></p>
+      <button class="button primary" id="loginButton" type="submit">登录</button>
+    </form>
+  </section>
+  <main class="shell" id="managerScreen" hidden>
+    <header class="topbar">
+      <div><p class="eyebrow">Local service</p><h1>IBKR Gateway</h1><p class="subtitle">管理 Gateway 实例、登录状态与本机运行版本</p></div>
+      <div class="actions"><button class="button" id="settingsButton">全局设置</button><button class="button" id="tokenButton">API Token</button><button class="button" id="refreshButton">刷新</button><button class="button primary" id="createButton">新建 Gateway</button><button class="button" id="logoutButton">退出管理页面</button></div>
+    </header>
+    <p class="hint" id="sessionInfo"></p>
+    <div class="notice" id="notice" role="status"></div>
+    <section class="summary" aria-label="Gateway 概览">
+      <div class="metric"><span>Gateway 总数</span><strong id="totalMetric">—</strong></div>
+      <div class="metric"><span>正在运行</span><strong id="runningMetric">—</strong></div>
+      <div class="metric"><span>已认证</span><strong id="authMetric">—</strong></div>
+      <div class="metric attention"><span>需要关注</span><strong id="attentionMetric">—</strong></div>
+    </section>
+    <section class="grid" id="gatewayGrid"><div class="loading">正在读取 Gateway…</div></section>
+  </main>
+
+  <dialog id="editorDialog">
+    <form id="editorForm">
+      <div class="dialog-head"><h2 id="editorTitle">新建 Gateway</h2><button class="button small" type="button" data-close="editorDialog">关闭</button></div>
+      <div class="dialog-body">
+        <div class="form-grid">
+          <div class="field"><label for="gatewayId">实例 ID</label><input id="gatewayId" name="id" required pattern="[A-Za-z0-9._-]+" autocomplete="off"></div>
+          <div class="field"><label for="gatewayLifecycle">进程生命周期</label><select id="gatewayLifecycle" name="gateway_lifecycle"><option value="managed">跟随管理服务</option><option value="persistent">保持后台运行</option></select></div>
+          <div class="section-title">端口</div>
+          <div class="field"><label for="gatewayPort">Gateway 私有端口</label><input id="gatewayPort" name="gateway_port" type="number" min="1" max="65535" required><p class="hint">仅供本机管理服务连接，不应对外开放。</p></div>
+          <div class="field" id="proxyPortField"><label for="proxyPort">客户端代理端口</label><input id="proxyPort" name="proxy_port" type="number" min="1" max="65535" required><p class="hint">Traio、浏览器和 API 客户端连接这个端口。</p></div>
+          <div class="help field full" id="sharedAccessHint" hidden>已启用共享域名入口。客户端通过实例域名访问，无需单独分配代理端口。</div>
+          <div class="section-title">程序安装方式</div>
+          <div class="field full"><label for="installationMode">安装方式</label><select id="installationMode" name="installation_mode" aria-describedby="installationHint"><option value="shared">共享安装（推荐）</option><option value="independent">独立安装（高级 · 需要不同版本时使用）</option></select><p class="hint" id="installationHint">通常只需共享安装：共用程序文件，每个实例有独立配置、进程和登录会话。</p></div>
+          <div class="field full" id="independentDirectory" hidden><label for="gatewayDir">独立程序目录</label><input id="gatewayDir" name="gateway_dir" autocomplete="off"><p class="hint">已有安装则直接使用；空目录会在首次启动时安装完整程序。</p></div>
+          <div class="field full" id="independentTemplate" hidden><label for="bundledGatewayDir">指定版本的本地模板（可选）</label><input id="bundledGatewayDir" name="bundled_gateway_dir" autocomplete="off"><p class="hint">指定已解压的目标版本，首次安装时复制到独立目录。留空会下载管理器固定的官方版本，不会自动选择其他版本。</p></div>
+          <div class="help field full" id="installationPreview" aria-live="polite"></div>
+          <div class="inherit-box"><label class="check"><input id="useGlobalDefaults" name="use_global_defaults" type="checkbox">继承全局网络和上游设置</label><p class="inherit-preview" id="inheritPreview"></p></div>
+          <div class="field full"><label class="check"><input name="auto_start" type="checkbox">管理服务启动时自动运行此 Gateway</label></div>
+          <div class="field full"><label for="proxyToken">代理访问密钥</label><div class="token-row"><input id="proxyToken" name="proxy_token" type="password" autocomplete="new-password" aria-describedby="proxyTokenHint"><button class="button" type="button" id="generateProxyToken">重新生成</button></div><p class="hint" id="proxyTokenHint" aria-live="polite">新建时自动生成；编辑时留空会保留原值。</p></div>
+          <details class="advanced" id="instanceOverrides"><summary>此实例使用不同设置（高级）</summary><div class="form-grid">
+            <div class="help full"><strong>自定义网络设置</strong>这些设置不影响程序安装方式。通常保持继承即可。</div>
+            <div class="field full"><label for="gatewayUrl">私有 Gateway URL</label><input id="gatewayUrl" name="gateway_url" type="url" autocomplete="off"></div>
+            <div class="field full"><label for="downloadProxy">下载代理</label><input id="downloadProxy" name="download_proxy" placeholder="http://127.0.0.1:7890" autocomplete="off"><p class="hint">只用于下载 Gateway 安装包，不是客户端访问 Gateway 的代理。</p></div>
+            <div class="field full"><label for="gatewayProxyHost">IBKR API 上游</label><input id="gatewayProxyHost" name="gateway_proxy_host" type="url" autocomplete="off"><p class="hint">写入该实例的 YAML 配置，决定它把 API 请求转发到哪里；正常保持 https://api.ibkr.com。</p></div>
+            <div class="field full"><label for="gatewayAllowIps">允许访问的 IP（逗号分隔）</label><input id="gatewayAllowIps" name="gateway_allow_ips" autocomplete="off"></div>
+            <div class="field" id="proxyListenAddrField"><label for="proxyListenAddr">代理监听地址</label><input id="proxyListenAddr" name="proxy_listen_addr" autocomplete="off"></div>
+            <div class="field"><label for="proxyPublicUrl">代理公开 URL</label><input id="proxyPublicUrl" name="proxy_public_url" type="url" autocomplete="off"></div>
+          </div></details>
+          <input type="hidden" name="gateway_config_file"><input type="hidden" name="gateway_state_dir">
+        </div>
+      </div>
+      <div class="dialog-foot"><button class="button" type="button" data-close="editorDialog">取消</button><button class="button primary" id="saveButton" type="submit">保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="settingsDialog">
+    <form id="settingsForm">
+      <div class="dialog-head"><h2>全局设置</h2><button class="button small" type="button" data-close="settingsDialog">关闭</button></div>
+      <div class="dialog-body"><div class="form-grid">
+        <div class="section-title">安装与 Gateway 默认值</div>
+        <div class="field full"><label for="gatewayRootDir">Gateway 数据父目录</label><input id="gatewayRootDir" name="gateway_root_dir" required autocomplete="off"><p class="hint">保存实例状态。新增实例共用一份 Gateway 程序，只创建独立 YAML 配置。</p></div>
+        <div class="field full"><label for="sharedGatewayDir">共享 Gateway 程序目录</label><input id="sharedGatewayDir" name="shared_gateway_dir" autocomplete="off"><p class="hint">可直接使用已下载的 Gateway 目录。留空时优先选择已有安装，否则首次启动时下载一次。</p></div>
+        <div class="field full"><label for="globalBundledGatewayDir">内置 Gateway 目录（可选）</label><input id="globalBundledGatewayDir" name="bundled_gateway_dir" autocomplete="off"><p class="hint">离线或预装场景使用的本地 Gateway 模板。留空时由管理器下载并校验官方安装包。</p></div>
+        <div class="field full"><label for="globalDownloadProxy">下载代理（可选）</label><input id="globalDownloadProxy" name="download_proxy" placeholder="http://127.0.0.1:7890" autocomplete="off"><p class="hint">仅影响安装包下载；不会代理交易 API 或浏览器登录流量。</p></div>
+        <div class="field full"><label for="globalGatewayProxyHost">IBKR API 上游</label><input id="globalGatewayProxyHost" name="gateway_proxy_host" type="url" required autocomplete="off"><p class="hint">官方默认值为 https://api.ibkr.com。除非使用兼容的私有上游，否则不要修改。</p></div>
+        <div class="field full"><label for="globalGatewayAllowIps">Gateway 允许访问的 IP（逗号分隔）</label><input id="globalGatewayAllowIps" name="gateway_allow_ips" autocomplete="off"></div>
+        <div class="section-title">实例代理</div>
+        <div class="help full" id="localTLSInfo" hidden><strong>本地 HTTPS · 自动管理证书</strong><p>证书保存在数据卷，临近到期自动续签。每台访问设备只需信任一次本地 CA。</p><p id="localTLSStatus" class="local-tls-status"></p><a href="/management/v1/local-tls/ca.crt" download="ibkr-local-ca.crt">下载 CA 公共证书</a></div>
+        <div class="field" id="proxyListenHostField"><label for="proxyListenHost">实例端口监听主机</label><input id="proxyListenHost" name="proxy_listen_host" required autocomplete="off"><p class="hint">仅在未启用共享入口时使用；本机使用 127.0.0.1。</p></div>
+        <div class="field"><label for="sharedProxyListenAddr">共享 HTTPS 入口</label><input id="sharedProxyListenAddr" name="shared_proxy_listen_addr" readonly title="请编辑配置文件并重启管理服务后切换共享入口" placeholder="127.0.0.1:8081" autocomplete="off"><p class="hint">按子域名统一路由管理页和所有实例。更改入口须编辑配置文件并重启管理服务。</p></div>
+        <div class="field full"><label class="check"><input id="proxyTLSTerminated" name="proxy_tls_terminated" type="checkbox">TLS 已由 Railway、Cloudflare 等可信平台终止</label><p class="hint">启用后共享入口在容器内使用 HTTP，但公开 URL 仍必须是 HTTPS；不要把该端口绕过平台直接暴露到公网。</p></div>
+        <div class="field full"><label for="proxyPublicURLTemplate">公开 URL 模板</label><input id="proxyPublicURLTemplate" name="proxy_public_url_template" required autocomplete="off"><p class="hint" id="proxyTemplateHint">共享入口示例：https://{id}.localhost；每个实例必须展开为不同主机名。</p></div>
+        <details class="advanced"><summary>管理服务与 TLS（高级）</summary><div class="form-grid">
+          <div class="field"><label for="managerListenAddr">独立管理监听地址</label><input id="managerListenAddr" name="listen_addr" readonly title="请编辑配置文件并重启管理服务后更改监听地址" autocomplete="off"><p class="hint">仅在未启用共享入口时使用。更改地址须编辑配置文件并重启管理服务。</p></div>
+          <div class="field"><label for="managerPublicURL">管理页公开 URL</label><input id="managerPublicURL" name="public_url" type="url" autocomplete="off"><p class="hint">本机共享入口示例：https://manager.localhost:8081。</p></div>
+          <div class="field"><label for="proxyTLSCertFile">代理 TLS 证书文件</label><input id="proxyTLSCertFile" name="proxy_tls_cert_file" autocomplete="off"></div>
+          <div class="field"><label for="proxyTLSKeyFile">代理 TLS 私钥文件</label><input id="proxyTLSKeyFile" name="proxy_tls_key_file" autocomplete="off"></div>
+          <div class="help full"><strong>远程监听的安全要求</strong>监听主机不是本机回环地址时，每个实例必须配置代理访问密钥，公开 URL 必须是 HTTPS，并提供 TLS 证书与私钥。</div>
+        </div></details>
+      </div></div>
+      <div class="dialog-foot"><button class="button" type="button" data-close="settingsDialog">取消</button><button class="button primary" id="saveSettingsButton" type="submit">保存全局设置</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="tokenDialog">
+    <form id="tokenForm">
+      <div class="dialog-head"><h2>管理 API Token</h2><button class="button small" type="button" data-close="tokenDialog">关闭</button></div>
+      <div class="dialog-body"><p class="hint">供外部程序调用管理 API，具有全部实例的管理权限。生成后立即保存并生效，旧 Token 立即失效。完整值仅在生成时显示，请复制保存。</p><div class="field"><label for="apiToken">新生成的 API Token</label><input id="apiToken" readonly autocomplete="off" spellcheck="false"><p class="hint">请求头：Authorization: Bearer &lt;token&gt;。访问单个 IBKR 实例请使用该实例的 Proxy Token。</p></div><p id="tokenFeedback" role="status"></p></div>
+      <div class="dialog-foot"><button class="button danger" id="revokeTokenButton" type="button">撤销 API Token</button><button class="button" id="copyTokenButton" type="button">复制</button><button class="button primary" id="saveTokenButton" type="submit">生成 / 轮换 Token</button></div>
+    </form>
+  </dialog>
+
+  <script src="/manager/manager.js" defer></script>
+</body>
+</html>

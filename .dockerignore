@@ -1,0 +1,16 @@
+.git
+dist
+ibkr-gateway-manager
+cmd/ibkr-gateway-manager/__debug_bin*
+.vscode
+*.log
+.env
+.env.*
+!.env.example
+config.json
+gateways
+tls
+certs
+*.pem
+*.key
+.codegraph

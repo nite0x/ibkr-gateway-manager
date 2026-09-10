@@ -1,0 +1,28 @@
+services:
+  ibkr-gateway-manager:
+    build: .
+    image: ${IBKR_GATEWAY_MANAGER_IMAGE:-ibkr-gateway-manager:local}
+    restart: unless-stopped
+    init: true
+    environment:
+      IBKR_GATEWAY_MANAGER_USERNAME: ${IBKR_GATEWAY_MANAGER_USERNAME:?set IBKR_GATEWAY_MANAGER_USERNAME in .env}
+      IBKR_GATEWAY_MANAGER_PASSWORD: ${IBKR_GATEWAY_MANAGER_PASSWORD:?set IBKR_GATEWAY_MANAGER_PASSWORD in .env}
+      IBKR_GATEWAY_MANAGER_PORT: ${IBKR_GATEWAY_MANAGER_PORT:-8088}
+      IBKR_GATEWAY_PUBLIC_DOMAIN: ${IBKR_GATEWAY_PUBLIC_DOMAIN:-}
+    ports:
+      - "127.0.0.1:${IBKR_GATEWAY_MANAGER_PORT:-8088}:${IBKR_GATEWAY_MANAGER_PORT:-8088}"
+    volumes:
+      - ibkr-gateway-manager-data:/home/gateway/.config/ibkr-gateway-manager
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 512
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:${IBKR_GATEWAY_MANAGER_PORT:-8088}/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 45s
+      retries: 3
+
+volumes:
+  ibkr-gateway-manager-data:

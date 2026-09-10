@@ -1,0 +1,8 @@
+[extend]
+useDefault = true
+
+# Exact documentation placeholders found in the original README history.
+[[allowlists]]
+description = "Non-secret README example tokens"
+regexTarget = "secret"
+regexes = ['''^replace-with-a-primary-proxy-token$''', '''^replace-with-a-long-random-secret$''']

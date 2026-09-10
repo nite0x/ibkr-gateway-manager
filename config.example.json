@@ -1,0 +1,7 @@
+{
+  "username": "admin",
+  "password": "replace-with-your-password",
+  "port": 8088,
+  "public_domain": "ibkr.example.com",
+  "gateways": {}
+}

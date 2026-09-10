@@ -1,0 +1,35 @@
+# Standalone local deployment: docker compose -f compose.local.yaml up -d
+# For users of an existing docker-run volume, keep the explicit volume name.
+services:
+  ibkr-gateway-manager:
+    build: .
+    image: ${IBKR_GATEWAY_MANAGER_IMAGE:-ibkr-gateway-manager:local}
+    container_name: ibkr-gateway-manager
+    init: true
+    restart: unless-stopped
+    environment:
+      IBKR_GATEWAY_LOCAL_TLS: "true"
+      IBKR_GATEWAY_MANAGER_LISTEN: 0.0.0.0:8088
+      IBKR_GATEWAY_MANAGER_PUBLIC_URL: https://manager.localhost:8088
+      IBKR_GATEWAY_SHARED_LISTEN: 0.0.0.0:8088
+      IBKR_GATEWAY_PROXY_PUBLIC_URL_TEMPLATE: https://{id}.localhost:8088
+      IBKR_GATEWAY_MANAGER_USERNAME: ${IBKR_GATEWAY_MANAGER_USERNAME:?set IBKR_GATEWAY_MANAGER_USERNAME}
+      IBKR_GATEWAY_MANAGER_PASSWORD: ${IBKR_GATEWAY_MANAGER_PASSWORD:?set IBKR_GATEWAY_MANAGER_PASSWORD}
+      IBKR_GATEWAY_MANAGER_SESSION_TTL_MINUTES: ${IBKR_GATEWAY_MANAGER_SESSION_TTL_MINUTES:-30}
+    ports:
+      - "127.0.0.1:8088:8088"
+    volumes:
+      - data:/home/gateway/.config/ibkr-gateway-manager
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 512
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--cacert", "/home/gateway/.config/ibkr-gateway-manager/tls/ca.crt", "https://127.0.0.1:8088/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 45s
+      retries: 3
+volumes:
+  data:
+    name: ${IBKR_GATEWAY_MANAGER_VOLUME:-ibkr-gateway-manager-data}
