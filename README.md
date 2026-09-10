@@ -48,7 +48,7 @@ docker compose up -d --no-build
 
 **从 GitHub Container Registry（GHCR）拉取：**
 
-推送 `v` 开头的版本标签（如 `v0.1.1`）后，[GitHub Actions](.github/workflows/ci.yml) 会执行代码检查、构建 `linux/amd64` 镜像并验证 HTTP/HTTPS 启动，全部通过后发布到 GHCR，镜像标签与 Git 标签一致。普通分支推送和 PR 只运行检查，不发布镜像。使用远程镜像时，只需取得 Compose 文件，无需本地构建。
+仅推送 `v` 开头的版本标签（如 `v0.1.1`）时，[GitHub Actions](.github/workflows/ci.yml) 才会执行代码检查、构建 `linux/amd64` 镜像并验证 HTTP/HTTPS 启动，全部通过后发布到 GHCR，镜像标签与 Git 标签一致。普通分支推送和 PR 不触发此工作流。使用远程镜像时，只需取得 Compose 文件，无需本地构建。
 
 ```sh
 # 将 <tag> 替换为 Actions 已成功发布的版本

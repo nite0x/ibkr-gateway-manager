@@ -2,7 +2,8 @@ name: ci
 
 on:
   push:
-  pull_request:
+    tags:
+      - 'v*'
 
 permissions:
   contents: read
