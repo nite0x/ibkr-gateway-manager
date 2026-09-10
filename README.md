@@ -46,20 +46,28 @@ openssl rand -hex 32
 docker compose up -d --no-build
 ```
 
-**从 Docker Hub 或 GitHub Container Registry（GHCR）拉取：**
+**从 GitHub Container Registry（GHCR）拉取：**
 
-当前仓库未配置镜像发布流程，以下是拉取方式模板；需先取得实际已发布的镜像地址和标签，不能直接使用占位符。使用远程镜像时，只需克隆源码取得 Compose 文件，无需执行上一节的 `docker build`。
+仅推送 `v` 开头的版本标签（如 `v0.1.1`）时，[GitHub Actions](.github/workflows/ci.yml) 才会执行代码检查、构建 `linux/amd64` 镜像并验证 HTTP/HTTPS 启动，全部通过后发布到 GHCR，镜像标签与 Git 标签一致。普通分支推送和 PR 不触发此工作流。使用远程镜像时，只需取得 Compose 文件，无需本地构建。
 
 ```sh
-# 二选一，并替换命名空间和版本标签
-export IBKR_GATEWAY_MANAGER_IMAGE='docker.io/<namespace>/ibkr-gateway-manager:<tag>'
-# export IBKR_GATEWAY_MANAGER_IMAGE='ghcr.io/<owner>/ibkr-gateway-manager:<tag>'
+# 将 <tag> 替换为 Actions 已成功发布的版本
+export IBKR_GATEWAY_MANAGER_IMAGE='ghcr.io/nite0x/ibkr-gateway-manager:<tag>'
 
 docker compose pull
 docker compose up -d --no-build
 ```
 
-私有镜像需先运行 `docker login`（Docker Hub）或 `docker login ghcr.io`。GitHub 源码仓库按上一节克隆构建，GHCR 用于拉取已发布的镜像。
+私有镜像需先运行 `docker login ghcr.io`。GitHub 源码仓库按上一节克隆构建，GHCR 用于拉取已发布的镜像。
+
+发布时，先提交并推送包含工作流的代码，再创建并推送新的版本标签：
+
+```sh
+git tag -a v0.1.1 -m "Release v0.1.1"
+git push origin v0.1.1
+```
+
+仅在本地打标签不会触发；标签必须指向包含新工作流的提交。已有 `v0.1.0` 不会自动补发，后续使用新版本号。发布使用 GitHub 自动提供的 `GITHUB_TOKEN`，工作流已声明 `packages: write`，无需额外配置 PAT。若 GHCR 中已有手动上传的同名包，需在包的 Settings → Manage Actions access 中授予本仓库写权限。镜像仅发布精确版本标签，不更新 `latest`；在仓库 Actions 页面查看结果，部署时使用成功发布的版本。
 
 配置 `ibkr.example.com` 后访问 `https://manager.ibkr.example.com/manager/`；全新部署未配置域名时访问 [本地管理页面](http://127.0.0.1:8088/manager/)（端口按配置替换），输入管理用户名和密码。全新数据卷的实例列表为空，点击「新建 Gateway」创建第一个 Gateway（默认建议 ID 为 `primary`，可修改），创建表单会生成独立 Proxy Token；可显示、复制或重新生成。保存后按所选的自动启动设置运行，也可手动启动。已有实例和数据保留，删除最后一个实例后重启仍保持为空。默认本次登录有效 30 分钟，刷新不会续期；过期后重新登录。点击「API Token」生成并复制供外部程序使用的密钥。
 
