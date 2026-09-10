@@ -14,8 +14,11 @@ var managerJS []byte
 //go:embed web/manager.css
 var managerCSS []byte
 
+//go:embed web/manager-icon.png
+var managerIcon []byte
+
 func isManagerUIPath(path string) bool {
-	return path == "/manager" || path == "/manager/" || path == "/manager/manager.js" || path == "/manager/manager.css"
+	return path == "/manager" || path == "/manager/" || path == "/manager/manager.js" || path == "/manager/manager.css" || path == "/manager/manager-icon.png"
 }
 
 func (s *Server) serveManagerUI(w http.ResponseWriter, r *http.Request) {
@@ -32,6 +35,8 @@ func (s *Server) serveManagerUI(w http.ResponseWriter, r *http.Request) {
 		body, contentType = managerJS, "text/javascript; charset=utf-8"
 	case "/manager/manager.css":
 		body, contentType = managerCSS, "text/css; charset=utf-8"
+	case "/manager/manager-icon.png":
+		body, contentType = managerIcon, "image/png"
 	}
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Referrer-Policy", "no-referrer")

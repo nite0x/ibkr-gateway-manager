@@ -197,7 +197,7 @@ func TestConfigSnapshotsAreIndependentAndRotationRevokesOnlyAffectedSessions(t *
 
 func TestEmbeddedManagerAssets(t *testing.T) {
 	s := newTestServer(t, &fakeGateway{}, "")
-	for path, contentType := range map[string]string{"/manager/": "text/html", "/manager/manager.js": "text/javascript", "/manager/manager.css": "text/css"} {
+	for path, contentType := range map[string]string{"/manager/": "text/html", "/manager/manager.js": "text/javascript", "/manager/manager.css": "text/css", "/manager/manager-icon.png": "image/png"} {
 		for _, method := range []string{http.MethodGet, http.MethodHead} {
 			w := httptest.NewRecorder()
 			s.ServeHTTP(w, httptest.NewRequest(method, path, nil))

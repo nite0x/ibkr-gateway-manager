@@ -4,13 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>IBKR Gateway Manager</title>
+  <link rel="icon" type="image/png" href="/manager/manager-icon.png">
   <link rel="stylesheet" href="/manager/manager.css">
 
 </head>
 <body>
   <section id="loginScreen" class="login-shell">
     <form id="loginForm" class="login-card">
-      <p class="eyebrow">IBKR Gateway Manager</p><h1>登录管理页面</h1>
+      <div class="brand"><img class="brand-icon" src="/manager/manager-icon.png" width="48" height="48" alt=""><p class="eyebrow">IBKR Gateway Manager</p></div><h1>登录管理页面</h1>
       <p class="subtitle">使用启动配置中的用户名和密码登录。</p>
       <div class="field"><label for="username">用户名</label><input id="username" name="username" autocomplete="username" required autofocus></div>
       <div class="field"><label for="password">密码</label><input id="password" name="password" type="password" autocomplete="current-password" required></div>
@@ -20,7 +21,7 @@
   </section>
   <main class="shell" id="managerScreen" hidden>
     <header class="topbar">
-      <div><p class="eyebrow">Local service</p><h1>IBKR Gateway</h1><p class="subtitle">管理 Gateway 实例、登录状态与本机运行版本</p></div>
+      <div class="brand"><img class="brand-icon" src="/manager/manager-icon.png" width="48" height="48" alt=""><div><p class="eyebrow">Local service</p><h1>IBKR Gateway</h1><p class="subtitle">管理 Gateway 实例、登录状态与本机运行版本</p></div></div>
       <div class="actions"><button class="button" id="settingsButton">全局设置</button><button class="button" id="tokenButton">API Token</button><button class="button" id="refreshButton">刷新</button><button class="button primary" id="createButton">新建 Gateway</button><button class="button" id="logoutButton">退出管理页面</button></div>
     </header>
     <p class="hint" id="sessionInfo"></p>
