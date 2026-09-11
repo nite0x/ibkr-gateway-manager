@@ -214,6 +214,27 @@ func (s *Server) serveManagement(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "unauthorized"})
 		return
 	}
+	if r.URL.Path == "/management/v1/connections" && r.Method == http.MethodGet {
+		// Export credentials only to explicitly authenticated API clients.
+		if !s.authorizedAPI(r) {
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "manager API token required"})
+			return
+		}
+		s.opMu.Lock()
+		defer s.opMu.Unlock()
+		cfg := s.currentConfig()
+		connections := make([]gatewayConnection, 0, len(cfg.Gateways))
+		for _, id := range sortedGatewayIDs(cfg.Gateways) {
+			instance := cfg.Gateways[id]
+			connections = append(connections, gatewayConnection{
+				ID: id, ProxyURL: instance.ProxyPublicURL, ProxyToken: instance.ProxyToken,
+				AutoStart: instance.AutoStart,
+			})
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"connections": connections})
+		return
+	}
 	if r.URL.Path == "/management/v1/gateways" && r.Method == http.MethodGet {
 		writeJSON(w, http.StatusOK, map[string]any{"gateways": s.gatewayStatuses()})
 		return
@@ -332,6 +353,13 @@ func defaultGatewayID(instances map[string]appconfig.GatewayInstance) string {
 		}
 	}
 	return ""
+}
+
+type gatewayConnection struct {
+	ID         string `json:"id"`
+	ProxyURL   string `json:"proxy_url"`
+	ProxyToken string `json:"proxy_token"`
+	AutoStart  bool   `json:"auto_start"`
 }
 
 type gatewayStatus struct {
