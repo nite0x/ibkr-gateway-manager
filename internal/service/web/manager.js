@@ -1,7 +1,7 @@
     (() => {
       "use strict";
       const API = "/management/v1";
-      const state = { config: null, statuses: [], editingId: null, busy: new Set(), authenticated: false, expiresAt: 0, authVersion: 0 };
+      const state = { config: null, statuses: [], editingId: null, busy: new Set(), authenticated: false, expiresAt: 0, authVersion: 0, proxyTokenChanged: false };
       const $ = (id) => document.getElementById(id);
       const grid = $("gatewayGrid");
       const editor = $("editorDialog");
@@ -45,10 +45,73 @@
         const bytes = crypto.getRandomValues(new Uint8Array(32));
         return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
       }
+      const tokenVersions = {apiToken: 0, proxyToken: 0};
+      function maskToken(id) {
+        $(id).type = "password";
+        const button = document.querySelector(`[data-token-toggle="${id}"]`);
+        button.setAttribute("aria-pressed", "false");
+        button.setAttribute("aria-label", "显示 Token");
+        button.title = "显示 Token";
+      }
+      function syncTokenActions(id) {
+        for (const button of document.querySelectorAll(`[data-token-toggle="${id}"], [data-token-copy="${id}"]`)) button.disabled = !$(id).value;
+      }
+      function clearToken(id) {
+        tokenVersions[id]++;
+        $(id).value = "";
+        $(id).readOnly = id === "apiToken";
+        maskToken(id);
+        syncTokenActions(id);
+      }
       function resetProxyTokenFeedback() {
-        form.elements.proxy_token.type = "password";
+        clearToken("proxyToken");
+        state.proxyTokenChanged = false;
         $("generateProxyToken").textContent = "重新生成";
-        $("proxyTokenHint").textContent = "新建时自动生成；编辑时留空会保留原值。";
+        $("proxyTokenHint").textContent = "默认隐藏，可点击小眼睛查看或直接复制；修改后保存生效，留空保留原值。";
+      }
+      async function loadToken(id, path, key, dialog, feedback) {
+        const version = ++tokenVersions[id];
+        $(id).readOnly = true;
+        $(id).placeholder = "正在读取…";
+        try {
+          const data = await authRequest(path);
+          if (version !== tokenVersions[id] || !dialog.open || !state.authenticated) return;
+          $(id).value = data[key] || "";
+          $(id).placeholder = $(id).value ? "" : "尚未配置 Token";
+        } catch (error) {
+          if (version !== tokenVersions[id] || !dialog.open) return;
+          $(id).placeholder = "读取失败，可重新打开重试";
+          $(feedback).textContent = error.message;
+        } finally {
+          if (version === tokenVersions[id]) {
+            $(id).readOnly = id === "apiToken";
+            syncTokenActions(id);
+          }
+        }
+      }
+      async function copyToken(id, feedback) {
+        const value = $(id).value;
+        if (!value) return;
+        const version = tokenVersions[id];
+        try {
+          if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+          await navigator.clipboard.writeText(value);
+        } catch {
+          const temporary = document.createElement("textarea");
+          temporary.value = value;
+          temporary.readOnly = true;
+          temporary.style.cssText = "position:fixed;opacity:0;pointer-events:none";
+          $(id).closest("dialog").append(temporary);
+          temporary.select();
+          let copied = false;
+          try { copied = document.execCommand("copy"); } catch {}
+          temporary.remove();
+          if (!copied) {
+            if (version === tokenVersions[id]) $(feedback).textContent = "复制失败，请点击小眼睛显示后手动复制。";
+            return;
+          }
+        }
+        if (version === tokenVersions[id]) $(feedback).textContent = "已复制完整 Token。";
       }
       function portFromAddress(value, fallback = 0) {
         const match = String(value || "").match(/:(\d+)$/);
@@ -199,7 +262,6 @@
         resetProxyTokenFeedback();
         const suggested = nextDefaults();
         const value = id ? {id, ...state.config.gateways[id]} : suggested;
-        if (id && !statusFor(id)?.proxy_token_configured) value.proxy_token = suggested.proxy_token;
         $("editorTitle").textContent = id ? `编辑 ${id}` : "新建 Gateway";
         form.elements.id.value = value.id;
         form.elements.id.readOnly = Boolean(id);
@@ -208,12 +270,16 @@
         form.elements.proxy_port.value = usesSharedProxy() ? "" : value.proxy_port || portFromAddress(value.proxy_listen_addr, suggested.proxy_port);
         form.elements.gateway_allow_ips.value = (value.gateway_allow_ips || []).join(", ");
         form.elements.proxy_token.value = value.proxy_token || "";
+        form.elements.proxy_token.placeholder = "";
+        state.proxyTokenChanged = !id;
+        syncTokenActions("proxyToken");
         form.elements.auto_start.checked = Boolean(value.auto_start);
         form.elements.use_global_defaults.checked = id ? Boolean(value.use_global_defaults) : true;
         form.elements.installation_mode.value = installationMode(value);
         $("instanceOverrides").open = !form.elements.use_global_defaults.checked;
         syncInheritanceUI();
         editor.showModal();
+        if (id) void loadToken("proxyToken", `/proxy-token?gateway_id=${encodeURIComponent(id)}`, "proxy_token", editor, "proxyTokenHint");
       }
       async function saveEditor(event) {
         event.preventDefault();
@@ -242,7 +308,7 @@
           gateway.gateway_allow_ips = String(data.get("gateway_allow_ips") || "").split(",").map((value) => value.trim()).filter(Boolean);
         }
         const proxyToken = String(data.get("proxy_token") || "").trim();
-        if (proxyToken) gateway.proxy_token = proxyToken;
+        if (proxyToken && state.proxyTokenChanged) gateway.proxy_token = proxyToken;
         gateway.auto_start = form.elements.auto_start.checked;
         const gateways = {...state.config.gateways, [id]: gateway};
         $("saveButton").disabled = true;
@@ -359,38 +425,62 @@
       $("refreshButton").addEventListener("click", () => void load());
       $("createButton").addEventListener("click", () => openEditor());
       $("settingsButton").addEventListener("click", openSettings);
-      $("tokenButton").addEventListener("click", () => { $("apiToken").value = ""; $("tokenFeedback").textContent = ""; tokenDialog.showModal(); });
-      tokenDialog.addEventListener("close", () => { $("apiToken").value = ""; });
+      $("tokenButton").addEventListener("click", () => {
+        clearToken("apiToken");
+        $("tokenFeedback").textContent = "";
+        tokenDialog.showModal();
+        void loadToken("apiToken", "/api-token", "api_token", tokenDialog, "tokenFeedback");
+      });
+      tokenDialog.addEventListener("close", () => clearToken("apiToken"));
+      editor.addEventListener("close", resetProxyTokenFeedback);
+      document.querySelectorAll("[data-token-toggle]").forEach((button) => button.addEventListener("click", () => {
+        const input = $(button.dataset.tokenToggle);
+        const visible = input.type === "password";
+        input.type = visible ? "text" : "password";
+        button.setAttribute("aria-pressed", String(visible));
+        button.setAttribute("aria-label", visible ? "隐藏 Token" : "显示 Token");
+        button.title = visible ? "隐藏 Token" : "显示 Token";
+      }));
+      $("copyTokenButton").addEventListener("click", () => void copyToken("apiToken", "tokenFeedback"));
+      $("copyProxyTokenButton").addEventListener("click", () => void copyToken("proxyToken", "proxyTokenHint"));
+      form.elements.proxy_token.addEventListener("input", () => {
+        state.proxyTokenChanged = true;
+        syncTokenActions("proxyToken");
+      });
       $("generateProxyToken").addEventListener("click", () => {
-        const input = form.elements.proxy_token;
-        input.value = generateToken();
-        input.type = "text";
-        input.focus();
-        input.select();
+        clearToken("proxyToken");
+        form.elements.proxy_token.placeholder = "";
+        form.elements.proxy_token.value = generateToken();
+        state.proxyTokenChanged = true;
+        syncTokenActions("proxyToken");
         $("generateProxyToken").textContent = "再次生成";
-        $("proxyTokenHint").textContent = "已生成新密钥并选中。保存后生效，请同步更新使用此代理的客户端。";
+        $("proxyTokenHint").textContent = "已生成新密钥，可查看或复制。保存后生效，请同步更新使用此代理的客户端。";
       });
-      $("tokenForm").addEventListener("submit", async (event) => {
-        event.preventDefault();
-        if (!confirm("生成新 API Token 后，旧 Token 将立即失效。继续？")) return;
+      async function changeAPIToken(method) {
+        const version = ++tokenVersions.apiToken;
         $("saveTokenButton").disabled = true;
+        $("revokeTokenButton").disabled = true;
         try {
-          const data = await authRequest("/api-token", {method:"POST"});
-          $("apiToken").value = data.api_token;
-          $("apiToken").focus(); $("apiToken").select();
-          $("tokenFeedback").textContent = "新 Token 已保存并生效，请立即复制。";
-        } catch (error) { notify(error.message, true); }
-        finally { $("saveTokenButton").disabled = false; }
+          const data = await authRequest("/api-token", {method});
+          if (version !== tokenVersions.apiToken || !tokenDialog.open || !state.authenticated) return;
+          $("apiToken").value = data.api_token || "";
+          $("apiToken").placeholder = data.api_token ? "" : "尚未配置 Token";
+          maskToken("apiToken");
+          $("tokenFeedback").textContent = method === "POST" ? "新 Token 已保存并生效，可查看或复制。" : "API Token 已撤销。";
+        } catch (error) {
+          if (version === tokenVersions.apiToken) $("tokenFeedback").textContent = error.message;
+        } finally {
+          $("saveTokenButton").disabled = false;
+          $("revokeTokenButton").disabled = false;
+          syncTokenActions("apiToken");
+        }
+      }
+      $("tokenForm").addEventListener("submit", (event) => {
+        event.preventDefault();
+        if (confirm("生成新 API Token 后，旧 Token 将立即失效。继续？")) void changeAPIToken("POST");
       });
-      $("copyTokenButton").addEventListener("click", async () => {
-        if (!$("apiToken").value) return;
-        try { await navigator.clipboard.writeText($("apiToken").value); $("tokenFeedback").textContent = "已复制"; }
-        catch { $("apiToken").focus(); $("apiToken").select(); $("tokenFeedback").textContent = "请手动复制选中的 Token。"; }
-      });
-      $("revokeTokenButton").addEventListener("click", async () => {
-        if (!confirm("撤销后外部程序将无法调用管理 API，直到配置新的 Token。继续？")) return;
-        try { await authRequest("/api-token", {method:"DELETE"}); $("apiToken").value = ""; $("tokenFeedback").textContent = "API Token 已撤销。"; }
-        catch (error) { notify(error.message, true); }
+      $("revokeTokenButton").addEventListener("click", () => {
+        if (confirm("撤销后外部程序将无法调用管理 API，直到配置新的 Token。继续？")) void changeAPIToken("DELETE");
       });
       async function authRequest(path, options = {}) {
         const response = await fetch(`/auth/v1${path}`, {...options, credentials:"same-origin", headers:{"Content-Type":"application/json"}});
@@ -405,7 +495,7 @@
         state.authenticated = false; state.authVersion++; state.config = null; state.statuses = [];
         clearTimeout(showSession.timer);
         for (const dialog of [editor, settingsDialog, tokenDialog]) if (dialog.open) dialog.close();
-        $("apiToken").value = ""; form.reset(); settingsForm.reset(); state.editingId = null;
+        clearToken("apiToken"); resetProxyTokenFeedback(); form.reset(); settingsForm.reset(); state.editingId = null;
         grid.innerHTML = "";
         $("managerScreen").hidden = true; $("loginScreen").hidden = false;
         $("loginError").textContent = message; $("password").value = "";

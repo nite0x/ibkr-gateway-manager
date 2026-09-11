@@ -358,3 +358,53 @@ func TestConfigSavePreservesManagerLoginAndStartupCredentials(t *testing.T) {
 		t.Fatal("ordinary config save revoked manager login")
 	}
 }
+
+func TestStoredTokensRequireManagerSession(t *testing.T) {
+	s := newTestServer(t, &fakeGateway{}, "api-secret")
+	instance := s.config.Gateways["primary"]
+	instance.ProxyToken = "instance-secret"
+	s.config.Gateways["primary"] = instance
+	now := time.Now()
+	s.now = func() time.Time { return now }
+	cookie := loginCookie(t, s)
+	for _, tc := range []struct{ path, key, want string }{
+		{"/auth/v1/api-token", "api_token", "api-secret"},
+		{"/auth/v1/proxy-token?gateway_id=primary", "proxy_token", "instance-secret"},
+	} {
+		for _, token := range []string{"", "api-secret", "instance-secret"} {
+			r := httptest.NewRequest("GET", tc.path, nil)
+			if token != "" {
+				r.Header.Set("Authorization", "Bearer "+token)
+			}
+			w := httptest.NewRecorder()
+			s.ServeHTTP(w, r)
+			if w.Code != http.StatusUnauthorized || strings.Contains(w.Body.String(), tc.want) {
+				t.Fatalf("token read without manager session: %s: %d", tc.path, w.Code)
+			}
+		}
+		w := authCall(s, "GET", tc.path, "", cookie)
+		var data map[string]string
+		if err := json.Unmarshal(w.Body.Bytes(), &data); err != nil {
+			t.Fatal(err)
+		}
+		if w.Code != http.StatusOK || data[tc.key] != tc.want || len(data) != 1 || w.Header().Get("Cache-Control") != "no-store" {
+			t.Fatalf("stored token read failed: %s: %d", tc.path, w.Code)
+		}
+	}
+	if w := authCall(s, "GET", "/auth/v1/proxy-token?gateway_id=missing", "", cookie); w.Code != http.StatusNotFound {
+		t.Fatal("missing gateway must return 404")
+	}
+	if w := authCall(s, "GET", "/management/v1/config", "", cookie); strings.Contains(w.Body.String(), "instance-secret") || strings.Contains(w.Body.String(), "api-secret") {
+		t.Fatal("normal config response leaked token")
+	}
+	s.config.APIToken = ""
+	if w := authCall(s, "GET", "/auth/v1/api-token", "", cookie); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"api_token":""`) {
+		t.Fatal("unset token must be empty")
+	}
+	now = now.Add(31 * time.Minute)
+	for _, path := range []string{"/auth/v1/api-token", "/auth/v1/proxy-token?gateway_id=primary"} {
+		if w := authCall(s, "GET", path, "", cookie); w.Code != http.StatusUnauthorized {
+			t.Fatal("expired session read token")
+		}
+	}
+}

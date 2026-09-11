@@ -291,6 +291,15 @@ func (s *Server) serveAuth(w http.ResponseWriter, r *http.Request) {
 		s.mu.Unlock()
 		s.setManagerCookie(w, "", time.Unix(1, 0), -1)
 		writeJSON(w, http.StatusOK, map[string]any{"status": "logged_out"})
+	case r.URL.Path == "/auth/v1/api-token" && r.Method == http.MethodGet:
+		writeJSON(w, http.StatusOK, map[string]any{"api_token": s.currentConfig().APIToken})
+	case r.URL.Path == "/auth/v1/proxy-token" && r.Method == http.MethodGet:
+		instance, exists := s.currentConfig().Gateways[r.URL.Query().Get("gateway_id")]
+		if !exists {
+			writeJSON(w, http.StatusNotFound, map[string]any{"error": "gateway not found"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"proxy_token": instance.ProxyToken})
 	case r.URL.Path == "/auth/v1/api-token" && (r.Method == http.MethodPost || r.Method == http.MethodDelete):
 		s.opMu.Lock()
 		defer s.opMu.Unlock()

@@ -63,9 +63,11 @@ func TestEmbeddedManagerUI(t *testing.T) {
 		!strings.Contains((response.Body.String()+string(managerJS)), "共享 HTTPS 入口") {
 		t.Fatal("manager page is missing simplified global and per-instance settings")
 	}
-	if !strings.Contains((response.Body.String()+string(managerJS)), `input.type = "text"`) ||
-		!strings.Contains((response.Body.String()+string(managerJS)), "已生成新密钥并选中") {
-		t.Fatal("manager page must reveal and confirm a regenerated proxy token")
+	for _, id := range []string{"apiToken", "proxyToken"} {
+		if !strings.Contains(response.Body.String(), `data-token-toggle="`+id+`"`) ||
+			!strings.Contains(response.Body.String(), `data-token-copy="`+id+`"`) {
+			t.Fatalf("manager page is missing reveal/copy controls for %s", id)
+		}
 	}
 	if !strings.Contains((response.Body.String()+string(managerJS)), "重启 Gateway") ||
 		!strings.Contains((response.Body.String()+string(managerJS)), "重启后将检查会话") {
